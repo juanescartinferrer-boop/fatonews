@@ -1,5 +1,6 @@
+
 import React, { useState, useEffect, useRef } from 'react';
-import { Mic, Radio, Menu, Search, Coffee, Keyboard, Send, Zap, AlertTriangle } from 'lucide-react';
+import { Mic, Radio, Menu, Search, Coffee, Keyboard, Send, Zap, AlertCircle } from 'lucide-react';
 import { NewsArticle } from './types';
 import { generateBreakingNews, generateNewsFromVoice, generateImage } from './services/gemini';
 import ArticleCard from './components/ArticleCard';
@@ -10,9 +11,10 @@ const App: React.FC = () => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [transcript, setTranscript] = useState('');
   const [keyboardInput, setKeyboardInput] = useState('');
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   
   const recognitionRef = useRef<any>(null);
-  const transcriptRef = useRef(''); // Ref para evitar cierres obsoletos
+  const transcriptRef = useRef('');
 
   useEffect(() => {
     const initNews = async () => {
@@ -21,8 +23,9 @@ const App: React.FC = () => {
         const breaking = await generateBreakingNews();
         const breakingImg = await generateImage(breaking.imagePrompt);
         setArticles([{ ...breaking, imageUrl: breakingImg }]);
-      } catch (e) {
+      } catch (e: any) {
         console.error("Error inicializando:", e);
+        setErrorMessage(e.message || "Error al conectar con la redacción central.");
       } finally {
         setIsGenerating(false);
       }
@@ -39,38 +42,44 @@ const App: React.FC = () => {
 
     const SpeechRecognition = (window as any).webkitSpeechRecognition || (window as any).SpeechRecognition;
     if (!SpeechRecognition) {
-      alert("Tu navegador no soporta voz. ¡Usa tus dedos de reportero!");
+      alert("Tu navegador no soporta voz. ¡Usa el teclado!");
       return;
     }
 
     const recognition = new SpeechRecognition();
     recognition.lang = 'es-ES';
-    recognition.continuous = false;
+    recognition.continuous = true;
     recognition.interimResults = true;
 
     recognition.onstart = () => {
       setIsRecording(true);
       setTranscript('');
       transcriptRef.current = '';
+      setErrorMessage(null);
     };
 
     recognition.onresult = (event: any) => {
-      const current = event.results[0][0].transcript;
-      setTranscript(current);
-      transcriptRef.current = current; // Actualizamos la ref en tiempo real
+      let interimTranscript = '';
+      for (let i = event.resultIndex; i < event.results.length; ++i) {
+        if (event.results[i].isFinal) {
+          transcriptRef.current += event.results[i][0].transcript;
+        } else {
+          interimTranscript += event.results[i][0].transcript;
+        }
+      }
+      setTranscript(transcriptRef.current + interimTranscript);
     };
 
-    recognition.onend = async () => {
+    recognition.onend = () => {
       setIsRecording(false);
       const finalText = transcriptRef.current.trim();
       if (finalText) {
-        console.log("Enviando a redacción:", finalText);
         processNewArticle(finalText);
       }
     };
 
     recognition.onerror = (event: any) => {
-      console.error("Error de reconocimiento:", event.error);
+      console.error("Error de voz:", event.error);
       setIsRecording(false);
     };
 
@@ -89,13 +98,14 @@ const App: React.FC = () => {
   const processNewArticle = async (text: string) => {
     if (isGenerating) return;
     setIsGenerating(true);
+    setErrorMessage(null);
     try {
       const article = await generateNewsFromVoice(text);
       const img = await generateImage(article.imagePrompt);
       setArticles(prev => [{ ...article, imageUrl: img }, ...prev]);
-    } catch (e) {
+    } catch (e: any) {
       console.error("Error al generar noticia:", e);
-      alert("Los becarios están en huelga (error de API). Revisa tu API_KEY en Vercel.");
+      setErrorMessage(e.message || "Error al redactar. Los becarios están en huelga.");
     } finally {
       setIsGenerating(false);
       setTranscript('');
@@ -104,73 +114,90 @@ const App: React.FC = () => {
   };
 
   const tickerItems = [
-    "EL CAFÉ DE LA SEGUNDA PLANTA ES SOSPECHOSAMENTE PARECIDO A CHAPAPOTE",
-    "REUNIÓN DE 3 HORAS CONFIRMADA PARA DECIDIR EL COLOR DE LOS POST-ITS",
-    "ALGUIEN HA PUESTO PESCADO EN EL MICROONDAS: EVACUACIÓN INMINENTE",
-    "EL EXCEL DEL JEFE HA DESARROLLADO CONSCIENCIA Y PIDE VACACIONES",
-    "MISTERIO: EL GRAPADOR DE PEPE HA DESAPARECIDO POR TERCERA VEZ ESTA SEMANA",
-    "NUEVA POLÍTICA: SE PROHÍBE RESPIRAR FUERTE LOS LUNES POR LA MAÑANA"
+    "REUNIÓN CONFIRMADA PARA DECIDIR SI EL AGUA DEL GRIFO ES DEMASIADO HÚMEDA",
+    "EL EXCEL DE FINANZAS HA DESARROLLADO SENTIMIENTOS Y ESTÁ LLORANDO",
+    "SE BUSCA: ALGUIEN QUE SEPA USAR LA FOTOCOPIADORA SIN INVOCAR A UN DEMONIO",
+    "NUEVA NORMA: PROHIBIDO DECIR 'PARA AYER' BAJO PENA DE TRABAJAR EL DOMINGO",
+    "CONMOCIÓN: PEPE HA TRAÍDO CROQUETAS Y LA PRODUCTIVIDAD HA CAÍDO UN 90%"
   ];
 
   return (
     <div className="min-h-screen paper-texture pb-20">
-      <div className="bg-red-600 text-white py-2 overflow-hidden border-b-2 border-black">
+      {/* Ticker de noticias */}
+      <div className="bg-red-700 text-white py-2 overflow-hidden border-b-2 border-black">
         <div className="animate-ticker">
           {tickerItems.concat(tickerItems).map((item, i) => (
-            <span key={i} className="mx-8 font-black text-sm tracking-tighter italic">
+            <span key={i} className="mx-8 font-black text-sm uppercase italic">
               <Zap className="inline mr-2" size={14} /> {item}
             </span>
           ))}
         </div>
       </div>
 
-      <header className="border-b-4 border-black px-4 py-8 mb-8 bg-white/90 backdrop-blur sticky top-0 z-50 shadow-md">
-        <div className="max-w-7xl mx-auto text-center">
-          <h1 className="newspaper-font text-7xl md:text-9xl font-black tracking-tighter leading-none select-none">
+      {/* Header Newspaper Style */}
+      <header className="border-b-8 border-double border-black px-4 py-10 mb-8 bg-white/90">
+        <div className="max-w-7xl mx-auto flex flex-col items-center">
+          <div className="w-full flex justify-between items-end border-b border-black pb-2 mb-4 text-xs font-bold uppercase tracking-widest">
+            <span>VOL. LXIX ... No. 1337</span>
+            <span className="text-3xl hidden md:block">EL DIARIO DE LA OFICINA</span>
+            <span>{new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' }).toUpperCase()}</span>
+          </div>
+          <h1 className="newspaper-font text-8xl md:text-[10rem] font-black tracking-tighter leading-none select-none text-center">
             FATONEWS
           </h1>
-          <p className="newspaper-font text-xl md:text-2xl font-bold italic text-gray-500 uppercase tracking-widest mt-4">
-            "Donde la verdad es una sugerencia"
-          </p>
+          <div className="w-full border-t border-black mt-2 pt-2 text-center">
+            <p className="newspaper-font text-2xl font-bold italic text-gray-800">
+              "La única fuente de información menos fiable que un cuñado en Navidad"
+            </p>
+          </div>
         </div>
       </header>
 
       <main className="max-w-7xl mx-auto px-4">
-        <section className="mb-16 bg-black text-white p-8 border-4 border-black shadow-[12px_12px_0px_0px_rgba(0,0,0,1)]">
-          <div className="mb-8">
-            <h2 className="text-4xl font-black mb-2 flex items-center gap-3 italic">
-              <Mic className={`${isRecording ? 'text-red-500 animate-pulse' : 'text-white'}`} /> 
-              SALA DE REDACCIÓN
-            </h2>
-            <p className="text-gray-400 font-bold">Cuéntanos el último cotilleo o drama del equipo.</p>
+        {/* Sección de Redacción */}
+        <section className="mb-16 bg-white border-4 border-black p-8 shadow-[12px_12px_0px_0px_rgba(0,0,0,1)]">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
+            <div>
+              <h2 className="text-4xl font-black mb-1 flex items-center gap-3">
+                <Radio className={isRecording ? 'text-red-600 animate-pulse' : 'text-black'} />
+                CENTRO DE BULOS
+              </h2>
+              <p className="text-gray-500 font-bold uppercase text-sm">Dicta o escribe el drama del día</p>
+            </div>
+            {errorMessage && (
+              <div className="bg-red-50 border-2 border-red-600 p-3 flex items-center gap-2 text-red-600 font-bold animate-bounce">
+                <AlertCircle size={20} />
+                {errorMessage}
+              </div>
+            )}
           </div>
           
-          <div className="flex flex-col gap-6">
-            <div className="flex flex-col sm:flex-row items-stretch gap-4">
+          <div className="grid gap-6">
+            <div className="flex flex-col lg:flex-row gap-4">
               <button 
                 onClick={handleVoiceInput}
                 disabled={isGenerating}
-                className={`flex items-center justify-center gap-4 px-10 py-5 rounded-sm font-black text-2xl transition-all shadow-[6px_6px_0px_0px_rgba(255,255,255,0.3)] ${
-                  isRecording ? 'bg-red-600 animate-pulse' : 'bg-white text-black hover:bg-red-50'
+                className={`flex-1 flex items-center justify-center gap-4 px-8 py-6 border-4 border-black font-black text-2xl transition-all shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] active:shadow-none active:translate-x-1 active:translate-y-1 ${
+                  isRecording ? 'bg-red-600 text-white' : 'bg-yellow-400 text-black hover:bg-yellow-300'
                 } ${isGenerating ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
-                {isRecording ? <div className="w-4 h-4 bg-white rounded-full animate-ping"></div> : <Mic size={28} />}
-                {isRecording ? '¡TE ESCUCHO!' : isGenerating ? 'REDACTANDO...' : 'DICTAR NOTICIA'}
+                <Mic size={32} />
+                {isRecording ? '¡HABLE AHORA!' : isGenerating ? 'REDACTANDO...' : 'CONTAR COTILLEO'}
               </button>
 
-              <form onSubmit={handleKeyboardSubmit} className="flex-1 flex gap-4">
+              <form onSubmit={handleKeyboardSubmit} className="flex-[2] flex gap-4">
                 <input 
                   type="text"
                   value={keyboardInput}
                   onChange={(e) => setKeyboardInput(e.target.value)}
-                  placeholder="Escribe el drama aquí y pulsa enter..."
-                  className="flex-1 bg-white/10 border-2 border-white/20 px-6 text-xl focus:outline-none focus:border-red-500 font-bold"
+                  placeholder="O escribe el rumor aquí..."
+                  className="flex-1 border-4 border-black px-6 text-xl focus:outline-none focus:bg-yellow-50 font-bold"
                   disabled={isGenerating}
                 />
                 <button 
                   type="submit"
                   disabled={!keyboardInput.trim() || isGenerating}
-                  className="bg-red-600 hover:bg-red-700 text-white font-black px-8 py-4 transition-all"
+                  className="bg-black text-white font-black px-10 py-4 hover:bg-gray-800 transition-all border-4 border-black"
                 >
                   <Send size={24} />
                 </button>
@@ -178,23 +205,28 @@ const App: React.FC = () => {
             </div>
             
             {transcript && (
-              <div className="bg-white/5 border-l-4 border-red-500 p-6 italic text-2xl text-gray-200 font-serif">
+              <div className="bg-gray-100 border-4 border-black border-dashed p-6 italic text-2xl text-gray-800 font-serif">
                 "{transcript}..."
               </div>
             )}
           </div>
         </section>
 
+        {/* Estado de carga */}
         {isGenerating && (
-          <div className="flex flex-col items-center justify-center py-16 bg-white border-2 border-black border-dashed rounded-lg mb-12">
-            <Coffee size={64} className="mb-6 text-red-600 animate-bounce" />
-            <p className="text-3xl font-black newspaper-font italic text-gray-800 text-center">
-              Escribiendo la primicia...
+          <div className="flex flex-col items-center justify-center py-20 bg-white border-4 border-black border-dashed mb-12">
+            <div className="relative">
+              <Coffee size={80} className="text-red-600 animate-bounce" />
+              <Zap className="absolute -top-4 -right-4 text-yellow-400 animate-pulse" size={40} />
+            </div>
+            <p className="text-4xl font-black newspaper-font italic mt-8 text-center animate-pulse">
+              RECOPILANDO PRUEBAS FALSAS...
             </p>
           </div>
         )}
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-12 gap-y-20">
+        {/* Grid de Noticias */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-12 gap-y-16">
           {articles.map((article, index) => (
             <ArticleCard 
               key={article.id} 
