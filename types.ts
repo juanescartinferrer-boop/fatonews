@@ -1,3 +1,8 @@
+export interface Comment {
+  author: string;
+  text: string;
+  avatarSeed: string;
+}
 
 export interface NewsArticle {
   id: string;
@@ -6,9 +11,20 @@ export interface NewsArticle {
   content: string;
   category: string;
   author: string;
+  authorId?: string;
   date: string;
   imagePrompt: string;
   imageUrl?: string;
+  comments?: Comment[];
+}
+
+export interface Redactor {
+  id: string;
+  name: string;
+  alias: string;
+  avatarUrl: string;
+  bio: string;
+  articlesWritten: number;
 }
 
 export enum NewsCategory {
@@ -18,3 +34,5 @@ export enum NewsCategory {
   GOSSIP = 'Rumores Infundados',
   SPORTS = 'Deportes de Silla'
 }
+
+export type AppView = 'home' | 'article' | 'bulo' | 'legal' | 'contacto' | 'login' | 'profile' | 'archive';
