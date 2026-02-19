@@ -1,6 +1,5 @@
-
 import React, { useState, useEffect, useRef } from 'react';
-import { Mic, Radio, Menu, Search, Coffee, Keyboard, Send, Zap, AlertCircle } from 'lucide-react';
+import { Mic, Radio, Send, Zap, AlertCircle, Coffee, RefreshCcw, Quote } from 'lucide-react';
 import { NewsArticle } from './types';
 import { generateBreakingNews, generateNewsFromVoice, generateImage } from './services/gemini';
 import ArticleCard from './components/ArticleCard';
@@ -11,42 +10,45 @@ const App: React.FC = () => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [transcript, setTranscript] = useState('');
   const [keyboardInput, setKeyboardInput] = useState('');
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   
   const recognitionRef = useRef<any>(null);
   const transcriptRef = useRef('');
 
   useEffect(() => {
-    const initNews = async () => {
-      setIsGenerating(true);
-      try {
-        const breaking = await generateBreakingNews();
-        const breakingImg = await generateImage(breaking.imagePrompt);
-        setArticles([{ ...breaking, imageUrl: breakingImg }]);
-      } catch (e: any) {
-        console.error("Error inicializando:", e);
-        setErrorMessage(e.message || "Error al conectar con la redacción central.");
-      } finally {
-        setIsGenerating(false);
-      }
-    };
-    initNews();
+    loadBreakingNews();
   }, []);
 
-  const handleVoiceInput = () => {
+  const loadBreakingNews = async () => {
+    setIsGenerating(true);
+    try {
+      const art = await generateBreakingNews();
+      const img = await generateImage(art.imagePrompt);
+      setArticles([{ ...art, imageUrl: img }]);
+    } catch (e: any) {
+      if (e.message === 'API_KEY_MISSING') {
+        setError("Falta la API_KEY. Configúrala en las variables de entorno de Vercel.");
+      } else {
+        setError("La redacción está saturada. Inténtalo de nuevo.");
+      }
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const toggleVoice = () => {
     if (isRecording) {
       recognitionRef.current?.stop();
-      setIsRecording(false);
       return;
     }
 
-    const SpeechRecognition = (window as any).webkitSpeechRecognition || (window as any).SpeechRecognition;
-    if (!SpeechRecognition) {
-      alert("Tu navegador no soporta voz. ¡Usa el teclado!");
+    const SpeechRec = (window as any).webkitSpeechRecognition || (window as any).SpeechRecognition;
+    if (!SpeechRec) {
+      alert("Navegador no compatible con voz.");
       return;
     }
 
-    const recognition = new SpeechRecognition();
+    const recognition = new SpeechRec();
     recognition.lang = 'es-ES';
     recognition.continuous = true;
     recognition.interimResults = true;
@@ -55,187 +57,168 @@ const App: React.FC = () => {
       setIsRecording(true);
       setTranscript('');
       transcriptRef.current = '';
-      setErrorMessage(null);
+      setError(null);
     };
 
     recognition.onresult = (event: any) => {
-      let interimTranscript = '';
+      let current = '';
       for (let i = event.resultIndex; i < event.results.length; ++i) {
-        if (event.results[i].isFinal) {
-          transcriptRef.current += event.results[i][0].transcript;
-        } else {
-          interimTranscript += event.results[i][0].transcript;
-        }
+        current += event.results[i][0].transcript;
       }
-      setTranscript(transcriptRef.current + interimTranscript);
+      setTranscript(current);
+      transcriptRef.current = current;
     };
 
     recognition.onend = () => {
       setIsRecording(false);
-      const finalText = transcriptRef.current.trim();
-      if (finalText) {
-        processNewArticle(finalText);
+      const text = transcriptRef.current.trim();
+      if (text.length > 3) {
+        handleGenerate(text);
       }
     };
 
-    recognition.onerror = (event: any) => {
-      console.error("Error de voz:", event.error);
-      setIsRecording(false);
-    };
-
+    recognition.onerror = () => setIsRecording(false);
     recognitionRef.current = recognition;
     recognition.start();
   };
 
-  const handleKeyboardSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (keyboardInput.trim() && !isGenerating) {
-      processNewArticle(keyboardInput);
-      setKeyboardInput('');
-    }
-  };
-
-  const processNewArticle = async (text: string) => {
+  const handleGenerate = async (text: string) => {
     if (isGenerating) return;
     setIsGenerating(true);
-    setErrorMessage(null);
+    setError(null);
     try {
       const article = await generateNewsFromVoice(text);
       const img = await generateImage(article.imagePrompt);
       setArticles(prev => [{ ...article, imageUrl: img }, ...prev]);
-    } catch (e: any) {
-      console.error("Error al generar noticia:", e);
-      setErrorMessage(e.message || "Error al redactar. Los becarios están en huelga.");
+      setTranscript('');
+      setKeyboardInput('');
+    } catch (e) {
+      setError("Error al redactar la noticia. ¡Los becarios se han escapado!");
     } finally {
       setIsGenerating(false);
-      setTranscript('');
-      transcriptRef.current = '';
     }
   };
 
-  const tickerItems = [
-    "REUNIÓN CONFIRMADA PARA DECIDIR SI EL AGUA DEL GRIFO ES DEMASIADO HÚMEDA",
-    "EL EXCEL DE FINANZAS HA DESARROLLADO SENTIMIENTOS Y ESTÁ LLORANDO",
-    "SE BUSCA: ALGUIEN QUE SEPA USAR LA FOTOCOPIADORA SIN INVOCAR A UN DEMONIO",
-    "NUEVA NORMA: PROHIBIDO DECIR 'PARA AYER' BAJO PENA DE TRABAJAR EL DOMINGO",
-    "CONMOCIÓN: PEPE HA TRAÍDO CROQUETAS Y LA PRODUCTIVIDAD HA CAÍDO UN 90%"
-  ];
-
   return (
-    <div className="min-h-screen paper-texture pb-20">
-      {/* Ticker de noticias */}
-      <div className="bg-red-700 text-white py-2 overflow-hidden border-b-2 border-black">
+    <div className="min-h-screen paper-texture pb-20 selection:bg-yellow-200">
+      {/* Ticker Superior */}
+      <div className="bg-black text-white py-2 overflow-hidden border-b-4 border-black">
         <div className="animate-ticker">
-          {tickerItems.concat(tickerItems).map((item, i) => (
-            <span key={i} className="mx-8 font-black text-sm uppercase italic">
-              <Zap className="inline mr-2" size={14} /> {item}
+          {[
+            "EL CAFÉ DE LA SEGUNDA PLANTA ES SOSPECHOSO",
+            "NUEVA REUNIÓN PARA DECIDIR EL COLOR DE LAS GRAPAS",
+            "ALGUIEN HA ROBADO EL TUPPER DE PEPE",
+            "EL EXCEL HA COBRADO VIDA Y PIDE VACACIONES",
+            "MISTERIO: ¿QUIÉN DEJÓ EL MICROONDAS SUCIO?"
+          ].map((text, i) => (
+            <span key={i} className="mx-10 font-black text-xs uppercase tracking-widest italic">
+              <Zap className="inline mr-2 text-yellow-400" size={14} /> {text}
             </span>
           ))}
         </div>
       </div>
 
-      {/* Header Newspaper Style */}
-      <header className="border-b-8 border-double border-black px-4 py-10 mb-8 bg-white/90">
-        <div className="max-w-7xl mx-auto flex flex-col items-center">
-          <div className="w-full flex justify-between items-end border-b border-black pb-2 mb-4 text-xs font-bold uppercase tracking-widest">
-            <span>VOL. LXIX ... No. 1337</span>
-            <span className="text-3xl hidden md:block">EL DIARIO DE LA OFICINA</span>
-            <span>{new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' }).toUpperCase()}</span>
-          </div>
-          <h1 className="newspaper-font text-8xl md:text-[10rem] font-black tracking-tighter leading-none select-none text-center">
+      <header className="max-w-7xl mx-auto px-4 pt-12 pb-8 text-center">
+        <div className="border-y-4 border-double border-black py-6">
+          <h1 className="newspaper-font text-8xl md:text-[12rem] font-black leading-none tracking-tighter uppercase mb-2">
             FATONEWS
           </h1>
-          <div className="w-full border-t border-black mt-2 pt-2 text-center">
-            <p className="newspaper-font text-2xl font-bold italic text-gray-800">
-              "La única fuente de información menos fiable que un cuñado en Navidad"
-            </p>
-          </div>
+          <p className="newspaper-font text-xl md:text-3xl font-bold italic text-gray-800">
+            "La única verdad es que todo es mentira"
+          </p>
+        </div>
+        <div className="flex justify-between border-b-2 border-black py-2 text-xs font-bold uppercase tracking-widest">
+          <span>Edición No. 1 - Oficina Central</span>
+          <span className="hidden md:block">PRECIO: UN CAFÉ CON LECHE</span>
+          <span>{new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}</span>
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4">
-        {/* Sección de Redacción */}
-        <section className="mb-16 bg-white border-4 border-black p-8 shadow-[12px_12px_0px_0px_rgba(0,0,0,1)]">
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
-            <div>
-              <h2 className="text-4xl font-black mb-1 flex items-center gap-3">
-                <Radio className={isRecording ? 'text-red-600 animate-pulse' : 'text-black'} />
-                CENTRO DE BULOS
-              </h2>
-              <p className="text-gray-500 font-bold uppercase text-sm">Dicta o escribe el drama del día</p>
-            </div>
-            {errorMessage && (
-              <div className="bg-red-50 border-2 border-red-600 p-3 flex items-center gap-2 text-red-600 font-bold animate-bounce">
-                <AlertCircle size={20} />
-                {errorMessage}
-              </div>
-            )}
+      <main className="max-w-7xl mx-auto px-4 mt-12">
+        {/* Panel de Control */}
+        <section className="bg-white neo-border p-8 mb-16 relative overflow-hidden">
+          <div className="absolute top-0 right-0 p-4 opacity-10">
+            <Quote size={120} />
           </div>
           
-          <div className="grid gap-6">
-            <div className="flex flex-col lg:flex-row gap-4">
-              <button 
-                onClick={handleVoiceInput}
-                disabled={isGenerating}
-                className={`flex-1 flex items-center justify-center gap-4 px-8 py-6 border-4 border-black font-black text-2xl transition-all shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] active:shadow-none active:translate-x-1 active:translate-y-1 ${
-                  isRecording ? 'bg-red-600 text-white' : 'bg-yellow-400 text-black hover:bg-yellow-300'
-                } ${isGenerating ? 'opacity-50 cursor-not-allowed' : ''}`}
-              >
-                <Mic size={32} />
-                {isRecording ? '¡HABLE AHORA!' : isGenerating ? 'REDACTANDO...' : 'CONTAR COTILLEO'}
-              </button>
-
-              <form onSubmit={handleKeyboardSubmit} className="flex-[2] flex gap-4">
-                <input 
-                  type="text"
-                  value={keyboardInput}
-                  onChange={(e) => setKeyboardInput(e.target.value)}
-                  placeholder="O escribe el rumor aquí..."
-                  className="flex-1 border-4 border-black px-6 text-xl focus:outline-none focus:bg-yellow-50 font-bold"
-                  disabled={isGenerating}
-                />
-                <button 
-                  type="submit"
-                  disabled={!keyboardInput.trim() || isGenerating}
-                  className="bg-black text-white font-black px-10 py-4 hover:bg-gray-800 transition-all border-4 border-black"
-                >
-                  <Send size={24} />
-                </button>
-              </form>
-            </div>
+          <div className="relative z-10">
+            <h2 className="text-4xl font-black mb-6 uppercase tracking-tighter flex items-center gap-3">
+              <Radio className={isRecording ? 'text-red-600 animate-pulse' : ''} />
+              Centro de Redacción
+            </h2>
             
+            <div className="flex flex-col lg:flex-row gap-6">
+              <div className="flex-1 flex flex-col gap-4">
+                <button 
+                  onClick={toggleVoice}
+                  disabled={isGenerating}
+                  className={`py-6 px-10 neo-border-sm text-2xl font-black transition-all flex items-center justify-center gap-4 ${
+                    isRecording ? 'bg-red-600 text-white animate-pulse' : 'bg-yellow-400 hover:bg-yellow-300'
+                  } ${isGenerating ? 'opacity-50' : ''}`}
+                >
+                  <Mic size={32} />
+                  {isRecording ? '¡TE ESCUCHAMOS!' : 'CONTAR CHISME'}
+                </button>
+                <p className="text-xs font-bold text-gray-500 uppercase italic">
+                  * Pulsa para hablar y vuelve a pulsar para redactar la noticia.
+                </p>
+              </div>
+
+              <div className="flex-[2] flex flex-col gap-4">
+                <div className="flex gap-4">
+                  <input 
+                    type="text"
+                    value={keyboardInput}
+                    onChange={(e) => setKeyboardInput(e.target.value)}
+                    placeholder="O escribe el drama aquí..."
+                    className="flex-1 neo-border-sm px-6 text-xl font-bold focus:outline-none focus:bg-yellow-50"
+                  />
+                  <button 
+                    onClick={() => handleGenerate(keyboardInput)}
+                    disabled={!keyboardInput.trim() || isGenerating}
+                    className="bg-black text-white px-8 py-4 neo-border-sm font-black hover:bg-gray-800 disabled:opacity-50"
+                  >
+                    <Send size={24} />
+                  </button>
+                </div>
+              </div>
+            </div>
+
             {transcript && (
-              <div className="bg-gray-100 border-4 border-black border-dashed p-6 italic text-2xl text-gray-800 font-serif">
+              <div className="mt-8 p-6 bg-gray-100 border-l-8 border-black italic text-2xl font-serif">
                 "{transcript}..."
+              </div>
+            )}
+
+            {error && (
+              <div className="mt-6 p-4 bg-red-100 border-2 border-red-600 flex items-center gap-3 text-red-600 font-bold">
+                <AlertCircle /> {error}
               </div>
             )}
           </div>
         </section>
 
-        {/* Estado de carga */}
+        {/* Estado de Carga */}
         {isGenerating && (
-          <div className="flex flex-col items-center justify-center py-20 bg-white border-4 border-black border-dashed mb-12">
-            <div className="relative">
-              <Coffee size={80} className="text-red-600 animate-bounce" />
-              <Zap className="absolute -top-4 -right-4 text-yellow-400 animate-pulse" size={40} />
-            </div>
-            <p className="text-4xl font-black newspaper-font italic mt-8 text-center animate-pulse">
-              RECOPILANDO PRUEBAS FALSAS...
-            </p>
+          <div className="flex flex-col items-center justify-center py-20 bg-white border-4 border-black border-dashed mb-16">
+            <RefreshCcw size={64} className="text-red-600 animate-spin mb-6" />
+            <h3 className="newspaper-font text-4xl font-black italic animate-pulse">
+              REDACTANDO LA PRIMICIA...
+            </h3>
           </div>
         )}
 
-        {/* Grid de Noticias */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-12 gap-y-16">
-          {articles.map((article, index) => (
-            <ArticleCard 
-              key={article.id} 
-              article={article} 
-              isMain={index === 0}
-            />
+        {/* Artículos */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-16">
+          {articles.map((art, i) => (
+            <ArticleCard key={art.id} article={art} isMain={i === 0} />
           ))}
         </div>
       </main>
+
+      <footer className="mt-20 border-t-4 border-black pt-10 text-center text-xs font-black uppercase tracking-[0.2em] text-gray-500">
+        <p>© 1924 - 2024 FATONEWS MEDIA GROUP - LA VERDAD ES RELATIVA</p>
+      </footer>
     </div>
   );
 };
