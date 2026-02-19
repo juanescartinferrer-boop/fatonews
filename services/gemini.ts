@@ -1,8 +1,14 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
 import { NewsArticle } from "../types";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Inicialización segura
+const getAI = () => {
+  const apiKey = process.env.API_KEY;
+  if (!apiKey) {
+    console.warn("API_KEY no detectada. Asegúrate de configurarla en Vercel.");
+  }
+  return new GoogleGenAI({ apiKey: apiKey || 'dummy-key' });
+};
 
 const NEWS_SCHEMA = {
   type: Type.OBJECT,
@@ -18,6 +24,7 @@ const NEWS_SCHEMA = {
 };
 
 export const generateNewsFromVoice = async (transcript: string): Promise<NewsArticle> => {
+  const ai = getAI();
   const response = await ai.models.generateContent({
     model: 'gemini-3-flash-preview',
     contents: `Convierte este comentario o transcripción de voz en una noticia satírica para el diario "FatoNews". El comentario es: "${transcript}". La noticia debe ser desternillante, usar juegos de palabras corporativos y sonar como un periódico serio pero con contenido absurdo.`,
@@ -37,6 +44,7 @@ export const generateNewsFromVoice = async (transcript: string): Promise<NewsArt
 };
 
 export const generateBreakingNews = async (): Promise<NewsArticle> => {
+  const ai = getAI();
   const response = await ai.models.generateContent({
     model: 'gemini-3-flash-preview',
     contents: "Genera una noticia de 'Última Hora' completamente aleatoria sobre un drama común de oficina (ej. se acabó el café, alguien robó un tupper, el Excel ha cobrado vida).",
@@ -57,6 +65,7 @@ export const generateBreakingNews = async (): Promise<NewsArticle> => {
 
 export const generateImage = async (prompt: string): Promise<string> => {
   try {
+    const ai = getAI();
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash-image',
       contents: {
