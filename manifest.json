@@ -1,0 +1,17 @@
+
+{
+  "short_name": "FatoNews",
+  "name": "FatoNews - El Diario de la Oficina",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/21/21601.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#000000",
+  "background_color": "#fdfcf8"
+}

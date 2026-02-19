@@ -1,0 +1,7 @@
+{
+  "name": "FatoNews - El Diario de la Oficina",
+  "description": "Un portal de noticias satírico donde puedes generar artículos desternillantes mediante tu voz. ¡Convierte los rumores de pasillo en portadas épicas!",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
