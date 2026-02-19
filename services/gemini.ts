@@ -1,8 +1,9 @@
+
 import { GoogleGenAI, Type } from "@google/genai";
 import { NewsArticle } from "../types";
 
-const cleanJsonResponse = (text: string) => {
-  // Maneja casos donde la IA devuelve bloques de código o texto antes del JSON
+const cleanJsonResponse = (text: string | undefined) => {
+  if (!text) return "{}";
   const match = text.match(/\{[\s\S]*\}/);
   return match ? match[0] : text;
 };
@@ -23,20 +24,33 @@ const NEWS_SCHEMA = {
     content: { type: Type.STRING, description: 'Cuerpo de la noticia con humor ácido.' },
     category: { type: Type.STRING, description: 'Categoría divertida.' },
     author: { type: Type.STRING, description: 'Periodista ficticio.' },
-    imagePrompt: { type: Type.STRING, description: 'Prompt visual para la imagen.' }
+    imagePrompt: { type: Type.STRING, description: 'Prompt visual para la imagen.' },
+    comments: {
+      type: Type.ARRAY,
+      description: 'Comentarios de compañeros de oficina ficticios.',
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          author: { type: Type.STRING, description: 'Nombre y cargo del compañero (ej: Paco de IT).' },
+          text: { type: Type.STRING, description: 'Comentario gracioso o indignado.' },
+          avatarSeed: { type: Type.STRING, description: 'Semilla para el avatar (nombre del autor).' }
+        },
+        required: ['author', 'text', 'avatarSeed']
+      }
+    }
   },
-  required: ['title', 'subtitle', 'content', 'category', 'author', 'imagePrompt']
+  required: ['title', 'subtitle', 'content', 'category', 'author', 'imagePrompt', 'comments']
 };
 
 export const generateNewsFromVoice = async (transcript: string): Promise<NewsArticle> => {
   const ai = getAI();
   const response = await ai.models.generateContent({
     model: 'gemini-3-flash-preview',
-    contents: `Convierte este chisme en una noticia de portada satírica para el diario corporativo FatoNews: "${transcript}". Usa juegos de palabras, exagera los hechos y mantén un tono periodístico serio pero absurdo.`,
+    contents: `Convierte este chisme en una noticia de portada satírica para el diario corporativo FatoNews: "${transcript}". Además, genera 3 comentarios de compañeros de oficina ficticios que reaccionen a la noticia de forma divertida.`,
     config: {
       responseMimeType: "application/json",
       responseSchema: NEWS_SCHEMA,
-      systemInstruction: "Eres el Editor Jefe de FatoNews, un diario de sátira laboral. Escribe siempre en castellano de España con jerga de oficina moderna."
+      systemInstruction: "Eres el Editor Jefe de FatoNews. Escribe siempre en castellano de España con jerga de oficina moderna."
     }
   });
 
@@ -52,7 +66,7 @@ export const generateBreakingNews = async (): Promise<NewsArticle> => {
   const ai = getAI();
   const response = await ai.models.generateContent({
     model: 'gemini-3-flash-preview',
-    contents: "Genera una noticia de última hora sobre un desastre gracioso en la oficina (cafetería, ascensor, reuniones interminables).",
+    contents: "Genera una noticia de última hora sobre un desastre gracioso en la oficina y 3 comentarios de compañeros.",
     config: {
       responseMimeType: "application/json",
       responseSchema: NEWS_SCHEMA
@@ -76,10 +90,9 @@ export const generateImage = async (prompt: string): Promise<string> => {
         parts: [{ text: `A professional, funny, cinematic editorial illustration for a satire newspaper: ${prompt}` }] 
       }
     });
-    const imgPart = response.candidates[0].content.parts.find(p => p.inlineData);
+    const imgPart = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
     return imgPart ? `data:image/png;base64,${imgPart.inlineData.data}` : `https://picsum.photos/seed/${Math.random()}/800/600`;
   } catch (err) {
-    console.error("Error imagen:", err);
     return `https://picsum.photos/seed/${Math.random()}/800/600`;
   }
 };
