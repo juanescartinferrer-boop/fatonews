@@ -1,13 +1,18 @@
+
 import { GoogleGenAI, Type } from "@google/genai";
 import { NewsArticle } from "../types";
 
-// Inicialización segura
+// Función para limpiar el JSON que a veces Gemini rodea con ```json ... ```
+const cleanJsonResponse = (text: string) => {
+  return text.replace(/```json/g, "").replace(/```/g, "").trim();
+};
+
 const getAI = () => {
   const apiKey = process.env.API_KEY;
-  if (!apiKey) {
-    console.warn("API_KEY no detectada. Asegúrate de configurarla en Vercel.");
+  if (!apiKey || apiKey === 'dummy-key') {
+    throw new Error("FALTA API KEY: Configura API_KEY en las variables de entorno de Vercel.");
   }
-  return new GoogleGenAI({ apiKey: apiKey || 'dummy-key' });
+  return new GoogleGenAI({ apiKey });
 };
 
 const NEWS_SCHEMA = {
@@ -35,7 +40,9 @@ export const generateNewsFromVoice = async (transcript: string): Promise<NewsArt
     }
   });
 
-  const data = JSON.parse(response.text || '{}');
+  const rawText = response.text || '{}';
+  const data = JSON.parse(cleanJsonResponse(rawText));
+  
   return {
     ...data,
     id: Math.random().toString(36).substr(2, 9),
@@ -51,15 +58,17 @@ export const generateBreakingNews = async (): Promise<NewsArticle> => {
     config: {
       responseMimeType: "application/json",
       responseSchema: NEWS_SCHEMA,
-      systemInstruction: "Editor jefe de FatoNews. Genera contenido satírico original."
+      systemInstruction: "Editor jefe de FatoNews. Genera contenido satírico original sobre el mundo laboral."
     }
   });
 
-  const data = JSON.parse(response.text || '{}');
+  const rawText = response.text || '{}';
+  const data = JSON.parse(cleanJsonResponse(rawText));
+  
   return {
     ...data,
     id: 'breaking-news',
-    date: 'AHORA MISMO'
+    date: 'EDICIÓN ESPECIAL'
   };
 };
 
@@ -69,7 +78,7 @@ export const generateImage = async (prompt: string): Promise<string> => {
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash-image',
       contents: {
-        parts: [{ text: `A humorous, cartoonish or cinematic funny illustration for a news article: ${prompt}` }]
+        parts: [{ text: `A humorous, cinematic and funny illustration for a news article with high detail: ${prompt}` }]
       }
     });
 
