@@ -1,16 +1,15 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
 import { NewsArticle } from "../types";
 
-// Función para limpiar el JSON que a veces Gemini rodea con ```json ... ```
 const cleanJsonResponse = (text: string) => {
+  // Elimina bloques de código markdown si existen
   return text.replace(/```json/g, "").replace(/```/g, "").trim();
 };
 
 const getAI = () => {
   const apiKey = process.env.API_KEY;
   if (!apiKey || apiKey === 'dummy-key') {
-    throw new Error("FALTA API KEY: Configura API_KEY en las variables de entorno de Vercel.");
+    throw new Error("API_KEY_MISSING");
   }
   return new GoogleGenAI({ apiKey });
 };
@@ -18,12 +17,12 @@ const getAI = () => {
 const NEWS_SCHEMA = {
   type: Type.OBJECT,
   properties: {
-    title: { type: Type.STRING, description: 'Un titular llamativo, exagerado y gracioso.' },
-    subtitle: { type: Type.STRING, description: 'Un subtítulo que aporte más contexto cómico.' },
-    content: { type: Type.STRING, description: 'Cuerpo de la noticia, al menos dos párrafos con mucho humor.' },
-    category: { type: Type.STRING, description: 'Una categoría inventada para la noticia.' },
-    author: { type: Type.STRING, description: 'Un nombre de periodista ficticio y divertido.' },
-    imagePrompt: { type: Type.STRING, description: 'Un prompt visual para generar una imagen absurda relacionada.' }
+    title: { type: Type.STRING, description: 'Titular satírico.' },
+    subtitle: { type: Type.STRING, description: 'Subtítulo gracioso.' },
+    content: { type: Type.STRING, description: 'Cuerpo de la noticia (2-3 párrafos).' },
+    category: { type: Type.STRING, description: 'Categoría absurda.' },
+    author: { type: Type.STRING, description: 'Nombre de periodista ficticio.' },
+    imagePrompt: { type: Type.STRING, description: 'Prompt para imagen descriptiva.' }
   },
   required: ['title', 'subtitle', 'content', 'category', 'author', 'imagePrompt']
 };
@@ -32,21 +31,19 @@ export const generateNewsFromVoice = async (transcript: string): Promise<NewsArt
   const ai = getAI();
   const response = await ai.models.generateContent({
     model: 'gemini-3-flash-preview',
-    contents: `Convierte este comentario o transcripción de voz en una noticia satírica para el diario "FatoNews". El comentario es: "${transcript}". La noticia debe ser desternillante, usar juegos de palabras corporativos y sonar como un periódico serio pero con contenido absurdo.`,
+    contents: `Genera una noticia satírica basada en este chisme de oficina: "${transcript}". Debe ser hilarante y usar terminología corporativa absurda.`,
     config: {
       responseMimeType: "application/json",
       responseSchema: NEWS_SCHEMA,
-      systemInstruction: "Eres el editor jefe de FatoNews, un periódico satírico famoso por sus noticias absurdas sobre el mundo laboral y de oficina. Tu tono es sarcástico, ingenioso y extremadamente divertido. Habla siempre en castellano de España con jerga de oficina."
+      systemInstruction: "Eres el editor jefe de FatoNews, un diario de humor corporativo. Tu misión es convertir quejas de oficina en noticias de portada épicas."
     }
   });
 
-  const rawText = response.text || '{}';
-  const data = JSON.parse(cleanJsonResponse(rawText));
-  
+  const data = JSON.parse(cleanJsonResponse(response.text));
   return {
     ...data,
     id: Math.random().toString(36).substr(2, 9),
-    date: new Date().toLocaleDateString('es-ES', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
+    date: new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })
   };
 };
 
@@ -54,21 +51,18 @@ export const generateBreakingNews = async (): Promise<NewsArticle> => {
   const ai = getAI();
   const response = await ai.models.generateContent({
     model: 'gemini-3-flash-preview',
-    contents: "Genera una noticia de 'Última Hora' completamente aleatoria sobre un drama común de oficina (ej. se acabó el café, alguien robó un tupper, el Excel ha cobrado vida).",
+    contents: "Genera una noticia de última hora sobre un desastre común en la oficina (ej. se acabó la leche, el ascensor va lento).",
     config: {
       responseMimeType: "application/json",
-      responseSchema: NEWS_SCHEMA,
-      systemInstruction: "Editor jefe de FatoNews. Genera contenido satírico original sobre el mundo laboral."
+      responseSchema: NEWS_SCHEMA
     }
   });
 
-  const rawText = response.text || '{}';
-  const data = JSON.parse(cleanJsonResponse(rawText));
-  
+  const data = JSON.parse(cleanJsonResponse(response.text));
   return {
     ...data,
-    id: 'breaking-news',
-    date: 'EDICIÓN ESPECIAL'
+    id: 'breaking',
+    date: 'EDICIÓN EXTRAORDINARIA'
   };
 };
 
@@ -77,19 +71,11 @@ export const generateImage = async (prompt: string): Promise<string> => {
     const ai = getAI();
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash-image',
-      contents: {
-        parts: [{ text: `A humorous, cinematic and funny illustration for a news article with high detail: ${prompt}` }]
-      }
+      contents: { parts: [{ text: `Editorial newspaper illustration, funny, high contrast: ${prompt}` }] }
     });
-
-    for (const part of response.candidates[0].content.parts) {
-      if (part.inlineData) {
-        return `data:image/png;base64,${part.inlineData.data}`;
-      }
-    }
-    return `https://picsum.photos/seed/${Math.random()}/800/600`;
-  } catch (error) {
-    console.error("Error generating image:", error);
+    const imgPart = response.candidates[0].content.parts.find(p => p.inlineData);
+    return imgPart ? `data:image/png;base64,${imgPart.inlineData.data}` : `https://picsum.photos/seed/${Math.random()}/800/600`;
+  } catch {
     return `https://picsum.photos/seed/${Math.random()}/800/600`;
   }
 };
